@@ -1,4 +1,4 @@
-# Text → SQL 🔥
+# Text → SQL 
 
 I fine-tuned T5-small on the Spider dataset to turn plain English questions into SQL queries. Built the whole thing from scratch — PyTorch training loop, evaluation pipeline, and a Flask web demo.
 
