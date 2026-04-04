@@ -58,7 +58,7 @@ BERT is encoder-only — great for classification stuff like sentiment analysis.
 ## Run It Yourself
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/text-to-sql.git
+git clone https://github.com/ryanwang-trt/text-to-sql.git
 cd text-to-sql
 pip install -r requirements.txt
 ```
@@ -96,7 +96,7 @@ text-to-sql/
 ├── app.py            ← Flask web demo
 ├── models/           ← saved model weights
 ├── requirements.txt  ← dependencies
-└── README.md         ← you are here
+└── README.md         
 ```
 
 ---
