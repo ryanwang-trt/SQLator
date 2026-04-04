@@ -74,7 +74,7 @@ Trains for 3 epochs on the Spider dataset. Model saves to `models/t5-sql/`.
 
 ```bash
 # Single question
-python predict.py --question "how many employees are in each department"
+python predict.py --question "how many engineers are in each department"
 
 # With database context
 python predict.py --question "how many singers do we have" --db concert_singer
