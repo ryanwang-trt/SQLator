@@ -20,9 +20,6 @@ Started at **4.26%** exact match accuracy. After adding schema context, normaliz
 | + Beam search (n=5) | **9.38%** | **97/1034** |
 
 Training loss across 3 epochs: **1.14 → 0.56 → 0.41**
-
-> Honestly a lot of the "wrong" predictions are functionally correct SQL — the exact match metric is strict and punishes stuff like quote style (`"france"` vs `'france'`) and extra whitespace.
-
 ---
 
 ## Example Outputs
@@ -107,11 +104,8 @@ text-to-sql/
 ## What I Learned
 
 - **Fine-tuning** = taking a pre-trained model and training it further on your specific task. Way faster than training from scratch
-- **Training loop** = zero_grad → forward → loss → backward → step. That's it. That's the whole thing
-- **Exact match is harsh** — the model outputs valid SQL that gets marked wrong because of spacing/quotes
-- **Schema context matters** — real Text-to-SQL systems feed table/column names into the model, not just the question
-- **Beam search helps** — considering multiple candidates instead of just one improved accuracy for free
-
+- **Training loop** = zero_grad → forward → loss → backward → step.
+- **Schema context** — real Text-to-SQL systems feed table/column names into the model, not just the question
 ---
 
 ## Stack
