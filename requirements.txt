@@ -4,3 +4,4 @@ datasets
 scikit-learn
 accelerate
 flask
+python-dotenv

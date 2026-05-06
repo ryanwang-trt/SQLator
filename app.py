@@ -1,24 +1,32 @@
+import logging
+import os
 from flask import Flask, request, render_template_string
 from transformers import T5Tokenizer, T5ForConditionalGeneration
+from config import MODEL_PATH, MAX_INPUT_LENGTH, MAX_OUTPUT_LENGTH, NUM_BEAMS, PROMPT_TEMPLATE, MAX_QUESTION_LENGTH
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+log = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
-model_path = "models/t5-sql"
-tokenizer = T5Tokenizer.from_pretrained(model_path)
-model = T5ForConditionalGeneration.from_pretrained(model_path)
+if not os.path.exists(MODEL_PATH):
+    raise FileNotFoundError(f"Model not found at '{MODEL_PATH}'. Run train.py first.")
+
+tokenizer = T5Tokenizer.from_pretrained(MODEL_PATH)
+model = T5ForConditionalGeneration.from_pretrained(MODEL_PATH)
 model.eval()
+log.info(f"Model loaded from {MODEL_PATH}")
 
 def predict(question, db_id="unknown"):
-    input_text = "translate English to SQL [database: " + db_id + "]: " + question
-    tokenized_input = tokenizer(input_text, max_length=128, truncation=True, return_tensors="pt")
+    input_text = PROMPT_TEMPLATE.format(db_id=db_id, question=question)
+    tokenized_input = tokenizer(input_text, max_length=MAX_INPUT_LENGTH, truncation=True, return_tensors="pt")
     tokenized_outputs = model.generate(
         input_ids=tokenized_input["input_ids"],
         attention_mask=tokenized_input["attention_mask"],
-        max_length=128,
-        num_beams=5,
+        max_length=MAX_OUTPUT_LENGTH,
+        num_beams=NUM_BEAMS,
     )
-    sql = tokenizer.decode(tokenized_outputs[0], skip_special_tokens=True)
-    return sql
+    return tokenizer.decode(tokenized_outputs[0], skip_special_tokens=True)
 
 HTML = """
 <!DOCTYPE html>
@@ -234,6 +242,12 @@ HTML = """
                 <button type="submit">Generate SQL →</button>
             </form>
 
+            {% if error %}
+            <div class="result">
+                <div style="color: #f87171; font-size: 14px;">{{ error }}</div>
+            </div>
+            {% endif %}
+
             {% if sql %}
             <div class="result">
                 <div class="result-label">Input</div>
@@ -258,15 +272,22 @@ def home():
     question = None
     db_id = None
     sql = None
+    error = None
 
     if request.method == "POST":
-        question = request.form["question"]
-        db_id = request.form.get("db_id", "unknown")
-        if not db_id:
-            db_id = "unknown"
-        sql = predict(question, db_id)
+        question = request.form.get("question", "").strip()
+        db_id = request.form.get("db_id", "").strip() or "unknown"
 
-    return render_template_string(HTML, question=question, db_id=db_id, sql=sql)
+        if not question:
+            error = "Please enter a question."
+        elif len(question) > MAX_QUESTION_LENGTH:
+            error = f"Question is too long (max {MAX_QUESTION_LENGTH} characters)."
+        else:
+            log.info(f"Predicting for question='{question}' db_id='{db_id}'")
+            sql = predict(question, db_id)
+
+    return render_template_string(HTML, question=question, db_id=db_id, sql=sql, error=error)
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    debug = os.getenv("FLASK_DEBUG", "false").lower() == "true"
+    app.run(debug=debug)

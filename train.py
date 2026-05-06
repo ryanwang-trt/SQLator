@@ -1,84 +1,70 @@
+import logging
 import torch
-
 from datasets import load_dataset
-from transformers import T5Tokenizer
-from transformers import T5ForConditionalGeneration
+from transformers import T5Tokenizer, T5ForConditionalGeneration
 from torch.utils.data import DataLoader
+from config import (
+    MODEL_PATH, BASE_MODEL, MAX_INPUT_LENGTH, BATCH_SIZE,
+    NUM_EPOCHS, LEARNING_RATE, PROMPT_TEMPLATE,
+)
 
-#load dataset
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+log = logging.getLogger(__name__)
+
 dataset = load_dataset("spider")
 
-#set device
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-#load T5 tokenizer
-tokenizer = T5Tokenizer.from_pretrained("t5-small")
-
-#load the model and move to device
-model = T5ForConditionalGeneration.from_pretrained("t5-small")
+tokenizer = T5Tokenizer.from_pretrained(BASE_MODEL)
+model = T5ForConditionalGeneration.from_pretrained(BASE_MODEL)
 model = model.to(device)
-print(f"Model loaded on: {device}")
+log.info(f"Model loaded on: {device}")
 
-#tokenize each example
 def tokenize(example):
-    input_text = "translate English to SQL [database: " + example["db_id"] + "]: " + example["question"]
+    input_text = PROMPT_TEMPLATE.format(db_id=example["db_id"], question=example["question"])
     target_text = example["query"]
 
-    # tokenize input and target seperately
-    model_inputs = tokenizer(input_text, max_length=128, truncation=True, padding="max_length")
-    labels = tokenizer(target_text, max_length=128, truncation=True, padding="max_length")
+    model_inputs = tokenizer(input_text, max_length=MAX_INPUT_LENGTH, truncation=True, padding="max_length")
+    labels = tokenizer(target_text, max_length=MAX_INPUT_LENGTH, truncation=True, padding="max_length")
 
     model_inputs["labels"] = labels["input_ids"]
     return model_inputs
 
 tokenized = dataset.map(tokenize)
-
-#keep only the columns the model needs
 tokenized["train"].set_format(type="torch", columns=["input_ids", "attention_mask", "labels"])
 
-#create DataLoader
-train_loader = DataLoader(tokenized["train"], batch_size=8, shuffle=True)
+train_loader = DataLoader(tokenized["train"], batch_size=BATCH_SIZE, shuffle=True)
+log.info(f"Number of batches: {len(train_loader)}")
+log.info("Tokenization done!")
 
-print(f"Number of batches: {len(train_loader)}")
+optimizer = torch.optim.AdamW(model.parameters(), lr=LEARNING_RATE)
 
-print("Tokenization done!")
-print("Sample input_ids:", tokenized["train"][0]["input_ids"][:10])
-print("Sample labels:   ", tokenized["train"][0]["labels"][:10])
-
-# --- Training Loop ---
-optimizer = torch.optim.AdamW(model.parameters(), lr=3e-4)
-
-NUM_EPOCHS = 3
-
-model.train() # switch to training mode 
+model.train()
 
 for epoch in range(NUM_EPOCHS):
     total_loss = 0
-    for step, batch in enumerate(train_loader): 
+    for step, batch in enumerate(train_loader):
         input_ids = batch["input_ids"].to(device)
         attention_mask = batch["attention_mask"].to(device)
         labels = batch["labels"].to(device)
 
-        # replace padding token id (0) with -100 so loss ignores padding
         labels[labels == tokenizer.pad_token_id] = -100
 
-        optimizer.zero_grad() #clear old gradients
-        outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels) #model trying predict sql
+        optimizer.zero_grad()
+        outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
         loss = outputs.loss
-        loss.backward() #calculating weights
-        optimizer.step() #update weights 
+        loss.backward()
+        optimizer.step()
 
-        total_loss += loss.item() #how wrong
+        total_loss += loss.item()
 
         if step % 100 == 0:
-            print(f"Epoch {epoch+1}/{NUM_EPOCHS} | Step {step}/{len(train_loader)} | Loss: {loss.item():.4f}")
+            log.info(f"Epoch {epoch+1}/{NUM_EPOCHS} | Step {step}/{len(train_loader)} | Loss: {loss.item():.4f}")
 
     avg_loss = total_loss / len(train_loader)
-    print(f"Epoch {epoch+1}/{NUM_EPOCHS} finished | Avg Loss: {avg_loss:.4f}")
+    log.info(f"Epoch {epoch+1}/{NUM_EPOCHS} finished | Avg Loss: {avg_loss:.4f}")
 
-print("Training complete!")
-
-# --- Save the model ---
-model.save_pretrained("models/t5-sql")
-tokenizer.save_pretrained("models/t5-sql")
-print("Model saved to models/t5-sql/")
+log.info("Training complete!")
+model.save_pretrained(MODEL_PATH)
+tokenizer.save_pretrained(MODEL_PATH)
+log.info(f"Model saved to {MODEL_PATH}")

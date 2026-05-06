@@ -1,41 +1,33 @@
-import argparse #reading command lines
+import argparse
+import logging
+import os
 import re
-from transformers import T5Tokenizer
-from transformers import T5ForConditionalGeneration
 from datasets import load_dataset
-from sklearn.metrics import accuracy_score
+from transformers import T5Tokenizer, T5ForConditionalGeneration
+from config import MODEL_PATH, MAX_INPUT_LENGTH, MAX_OUTPUT_LENGTH, NUM_BEAMS, PROMPT_TEMPLATE
 
-model_path = "models/t5-sql"
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+log = logging.getLogger(__name__)
 
-#load tokenizer
-tokenizer = T5Tokenizer.from_pretrained(model_path)
+if not os.path.exists(MODEL_PATH):
+    raise FileNotFoundError(f"Model not found at '{MODEL_PATH}'. Run train.py first.")
 
-#load model
-model = T5ForConditionalGeneration.from_pretrained(model_path)
-
-#evalution mode
+tokenizer = T5Tokenizer.from_pretrained(MODEL_PATH)
+model = T5ForConditionalGeneration.from_pretrained(MODEL_PATH)
 model.eval()
 
-#predict function
 def predict(question, db_id="unknown"):
-    input_text = "translate English to SQL [database: " + db_id + "]: " + question
-
-    tokenized_input = tokenizer(input_text, max_length=128, return_tensors="pt") #128 to match the training data
-
+    input_text = PROMPT_TEMPLATE.format(db_id=db_id, question=question)
+    tokenized_input = tokenizer(input_text, max_length=MAX_INPUT_LENGTH, return_tensors="pt")
     tokenized_outputs = model.generate(
         input_ids=tokenized_input["input_ids"],
         attention_mask=tokenized_input["attention_mask"],
-        max_length=128,
-        num_beams=5,
+        max_length=MAX_OUTPUT_LENGTH,
+        num_beams=NUM_BEAMS,
     )
+    return tokenizer.decode(tokenized_outputs[0], skip_special_tokens=True)
 
-    sql = tokenizer.decode(tokenized_outputs[0], skip_special_tokens=True) #decoded output
-
-    return sql
-
-#evaluate function
 def evaluate():
-    # load spider dataset and its validation split
     dataset = load_dataset("spider")
     validation_split = dataset["validation"]
 
@@ -43,26 +35,19 @@ def evaluate():
     samples = []
 
     for i, example in enumerate(validation_split):
-        #compare the predicted output and the actual output
         prediction = predict(example["question"], example["db_id"])
         sample = example["query"]
-
         predictions.append(normalize_sql(prediction))
         samples.append(normalize_sql(sample))
 
         if i % 100 == 0:
-            print(f"Evaluating: {i}/{len(validation_split)}")
+            log.info(f"Evaluating: {i}/{len(validation_split)}")
 
-    # get accuracy rate
-    correct = 0
-    for i in range(len(predictions)):
-        if predictions[i] == samples[i]:
-            correct = correct + 1
-
+    correct = sum(1 for p, s in zip(predictions, samples) if p == s)
     accuracy = correct / len(samples) * 100
 
-    print(f"\nExact Match Accuracy: {accuracy:.2f}%")
-    print(f"Correct: {correct}/{len(samples)}")
+    log.info(f"Exact Match Accuracy: {accuracy:.2f}%")
+    log.info(f"Correct: {correct}/{len(samples)}")
 
     print("\n--- Sample Predictions ---")
     for i in range(5):
@@ -73,13 +58,12 @@ def evaluate():
 
 def normalize_sql(sql):
     sql = sql.strip().lower()
-    sql = sql.replace('"', "'")          # standardize quotes
-    sql = re.sub(r'\s+', ' ', sql)       # collapse extra spaces
-    sql = sql.replace(' ,', ',')         # fix space before comma
-    sql = sql.replace(', ', ',')         # remove space after comma
+    sql = sql.replace('"', "'")
+    sql = re.sub(r'\s+', ' ', sql)
+    sql = sql.replace(' ,', ',')
+    sql = sql.replace(', ', ',')
     return sql
 
-#main block 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--question", type=str)
@@ -95,4 +79,3 @@ if __name__ == "__main__":
         print(f"SQL:      {sql}")
     else:
         print("Use --question or --evaluate")
-    
