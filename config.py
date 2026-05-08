@@ -10,6 +10,8 @@ NUM_EPOCHS = 3
 LEARNING_RATE = 3e-4
 NUM_BEAMS = 5
 
+HF_MODEL_ID = os.getenv("HF_MODEL_ID", "ryanwang-trt/t5-sql")
+
 PROMPT_TEMPLATE = "translate English to SQL [database: {db_id}]: {question}"
 
 MAX_QUESTION_LENGTH = 500

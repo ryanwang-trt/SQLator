@@ -58,14 +58,21 @@ class TestGetModel(unittest.TestCase):
         predict.tokenizer = None
         predict.model = None
 
+    @patch("predict.T5ForConditionalGeneration")
+    @patch("predict.T5Tokenizer")
     @patch("os.path.exists", return_value=False)
-    def test_raises_if_model_missing(self, mock_exists):
+    def test_falls_back_to_huggingface(self, mock_exists, mock_tok_cls, mock_model_cls):
         import predict
         predict.tokenizer = None
         predict.model = None
 
-        with self.assertRaises(FileNotFoundError):
-            get_model()
+        get_model()
+
+        mock_tok_cls.from_pretrained.assert_called_once_with(predict.HF_MODEL_ID)
+        mock_model_cls.from_pretrained.assert_called_once_with(predict.HF_MODEL_ID)
+
+        predict.tokenizer = None
+        predict.model = None
 
 
 class TestPredict(unittest.TestCase):

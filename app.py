@@ -2,7 +2,7 @@ import logging
 import os
 from flask import Flask, request, render_template_string
 from transformers import T5Tokenizer, T5ForConditionalGeneration
-from config import MODEL_PATH, MAX_INPUT_LENGTH, MAX_OUTPUT_LENGTH, NUM_BEAMS, PROMPT_TEMPLATE, MAX_QUESTION_LENGTH
+from config import MODEL_PATH, HF_MODEL_ID, MAX_INPUT_LENGTH, MAX_OUTPUT_LENGTH, NUM_BEAMS, PROMPT_TEMPLATE, MAX_QUESTION_LENGTH
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
@@ -15,12 +15,15 @@ model = None
 def get_model():
     global tokenizer, model
     if model is None:
-        if not os.path.exists(MODEL_PATH):
-            raise FileNotFoundError(f"Model not found at '{MODEL_PATH}'. Run train.py first.")
-        tokenizer = T5Tokenizer.from_pretrained(MODEL_PATH)
-        model = T5ForConditionalGeneration.from_pretrained(MODEL_PATH)
+        if os.path.exists(MODEL_PATH):
+            source = MODEL_PATH
+        else:
+            log.info(f"Local model not found at '{MODEL_PATH}', downloading from HuggingFace: {HF_MODEL_ID}")
+            source = HF_MODEL_ID
+        tokenizer = T5Tokenizer.from_pretrained(source)
+        model = T5ForConditionalGeneration.from_pretrained(source)
         model.eval()
-        log.info(f"Model loaded from {MODEL_PATH}")
+        log.info(f"Model loaded from {source}")
     return tokenizer, model
 
 def predict(question, db_id="unknown"):

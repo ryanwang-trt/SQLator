@@ -4,4 +4,5 @@ datasets
 scikit-learn
 accelerate
 flask
+huggingface_hub
 python-dotenv
