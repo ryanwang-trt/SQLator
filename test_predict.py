@@ -101,12 +101,13 @@ class TestPredict(unittest.TestCase):
         assert result == "SELECT id FROM users"
 
     def test_uses_prompt_template(self):
-        predict("my question", db_id="my_db")
+        predict("my question", db_id="my_db", schema="t1(a, b)")
         input_text = self.mock_tokenizer.call_args[0][0]
         assert "my_db" in input_text
         assert "my question" in input_text
+        assert "t1(a, b)" in input_text
 
-    def test_default_db_id(self):
+    def test_default_db_id_and_schema(self):
         predict("some question")
         input_text = self.mock_tokenizer.call_args[0][0]
         assert "unknown" in input_text

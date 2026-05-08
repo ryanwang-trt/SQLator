@@ -2,7 +2,8 @@ import logging
 import os
 from flask import Flask, request, render_template_string
 from transformers import T5Tokenizer, T5ForConditionalGeneration
-from config import MODEL_PATH, HF_MODEL_ID, MAX_INPUT_LENGTH, MAX_OUTPUT_LENGTH, NUM_BEAMS, PROMPT_TEMPLATE, MAX_QUESTION_LENGTH
+from config import MODEL_PATH, HF_MODEL_ID, MAX_INPUT_LENGTH, MAX_OUTPUT_LENGTH, NUM_BEAMS, PROMPT_TEMPLATE, MAX_QUESTION_LENGTH, MAX_SCHEMA_LENGTH
+from schema import truncate_schema
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
@@ -26,9 +27,10 @@ def get_model():
         log.info(f"Model loaded from {source}")
     return tokenizer, model
 
-def predict(question, db_id="unknown"):
-    input_text = PROMPT_TEMPLATE.format(db_id=db_id, question=question)
-    tokenizer, model = get_model() 
+def predict(question, db_id="unknown", schema="unknown"):
+    schema = truncate_schema(schema, MAX_SCHEMA_LENGTH)
+    input_text = PROMPT_TEMPLATE.format(db_id=db_id, schema=schema, question=question)
+    tokenizer, model = get_model()
     tokenized_input = tokenizer(input_text, max_length=MAX_INPUT_LENGTH, truncation=True, return_tensors="pt")
     tokenized_outputs = model.generate(
         input_ids=tokenized_input["input_ids"],
@@ -155,12 +157,27 @@ HTML = """
             margin-bottom: 20px;
         }
 
-        input[type=text]:focus {
+        input[type=text]:focus, textarea:focus {
             border-color: rgba(56, 189, 248, 0.4);
         }
 
-        input[type=text]::placeholder {
+        input[type=text]::placeholder, textarea::placeholder {
             color: #4b5563;
+        }
+
+        textarea {
+            width: 100%;
+            padding: 14px 16px;
+            background: rgba(0, 0, 0, 0.4);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 10px;
+            color: #f0f0f0;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 13px;
+            outline: none;
+            transition: border-color 0.2s;
+            margin-bottom: 20px;
+            resize: vertical;
         }
 
         button {
@@ -249,6 +266,9 @@ HTML = """
                 <label>DATABASE (OPTIONAL)</label>
                 <input type="text" name="db_id" placeholder="e.g. concert_singer" value="{{ db_id or '' }}">
 
+                <label>SCHEMA (OPTIONAL)</label>
+                <textarea name="schema" rows="3" placeholder="e.g. singer(singer_id, name, country, age), concert(concert_id, concert_name, theme)">{{ schema or '' }}</textarea>
+
                 <button type="submit">Generate SQL →</button>
             </form>
 
@@ -281,12 +301,14 @@ HTML = """
 def home():
     question = None
     db_id = None
+    schema = None
     sql = None
     error = None
 
     if request.method == "POST":
         question = request.form.get("question", "").strip()
         db_id = request.form.get("db_id", "").strip() or "unknown"
+        schema = request.form.get("schema", "").strip() or "unknown"
 
         if not question:
             error = "Please enter a question."
@@ -294,9 +316,9 @@ def home():
             error = f"Question is too long (max {MAX_QUESTION_LENGTH} characters)."
         else:
             log.info(f"Predicting for question='{question}' db_id='{db_id}'")
-            sql = predict(question, db_id)
+            sql = predict(question, db_id, schema=schema)
 
-    return render_template_string(HTML, question=question, db_id=db_id, sql=sql, error=error)
+    return render_template_string(HTML, question=question, db_id=db_id, schema=schema, sql=sql, error=error)
 
 if __name__ == "__main__":
     debug = os.getenv("FLASK_DEBUG", "false").lower() == "true"

@@ -4,7 +4,8 @@ import os
 import re
 from datasets import load_dataset
 from transformers import T5Tokenizer, T5ForConditionalGeneration
-from config import MODEL_PATH, HF_MODEL_ID, MAX_INPUT_LENGTH, MAX_OUTPUT_LENGTH, NUM_BEAMS, PROMPT_TEMPLATE
+from config import MODEL_PATH, HF_MODEL_ID, MAX_INPUT_LENGTH, MAX_OUTPUT_LENGTH, NUM_BEAMS, PROMPT_TEMPLATE, MAX_SCHEMA_LENGTH
+from schema import load_spider_schemas, truncate_schema
 import sqlglot
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -27,10 +28,11 @@ def get_model():
         log.info(f"Model loaded from {source}")
     return tokenizer, model
 
-def predict(question, db_id="unknown"):
-    input_text = PROMPT_TEMPLATE.format(db_id=db_id, question=question)
+def predict(question, db_id="unknown", schema="unknown"):
+    schema = truncate_schema(schema, MAX_SCHEMA_LENGTH)
+    input_text = PROMPT_TEMPLATE.format(db_id=db_id, schema=schema, question=question)
     tokenizer, model = get_model()
-    tokenized_input = tokenizer(input_text, max_length=MAX_INPUT_LENGTH, return_tensors="pt")
+    tokenized_input = tokenizer(input_text, max_length=MAX_INPUT_LENGTH, truncation=True, return_tensors="pt")
     tokenized_outputs = model.generate(
         input_ids=tokenized_input["input_ids"],
         attention_mask=tokenized_input["attention_mask"],
@@ -43,11 +45,14 @@ def evaluate():
     dataset = load_dataset("spider")
     validation_split = dataset["validation"]
 
+    schema_lookup = load_spider_schemas()
+
     predictions = []
     samples = []
 
     for i, example in enumerate(validation_split):
-        prediction = predict(example["question"], example["db_id"])
+        schema = schema_lookup.get(example["db_id"], "unknown")
+        prediction = predict(example["question"], example["db_id"], schema=schema)
         sample = example["query"]
         predictions.append(normalize_sql(prediction))
         samples.append(normalize_sql(sample))
@@ -84,12 +89,13 @@ if __name__ == "__main__":
     parser.add_argument("--question", type=str)
     parser.add_argument("--evaluate", action="store_true")
     parser.add_argument("--db", type=str, default="unknown")
+    parser.add_argument("--schema", type=str, default="unknown")
     args = parser.parse_args()
 
     if args.evaluate:
         evaluate()
     elif args.question:
-        sql = predict(args.question, args.db)
+        sql = predict(args.question, args.db, schema=args.schema)
         print(f"\nQuestion: {args.question}")
         print(f"SQL:      {sql}")
     else:
