@@ -5,7 +5,7 @@ from transformers import T5Tokenizer, T5ForConditionalGeneration
 from torch.utils.data import DataLoader
 from config import (
     MODEL_PATH, BASE_MODEL, MAX_INPUT_LENGTH, BATCH_SIZE,
-    NUM_EPOCHS, LEARNING_RATE, PROMPT_TEMPLATE,
+    NUM_EPOCHS, LEARNING_RATE, PROMPT_TEMPLATE, ACCUMULATION_STEPS,
 )
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -18,6 +18,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 tokenizer = T5Tokenizer.from_pretrained(BASE_MODEL)
 model = T5ForConditionalGeneration.from_pretrained(BASE_MODEL)
 model = model.to(device)
+model.gradient_checkpointing_enable()
 log.info(f"Model loaded on: {device}")
 
 def tokenize(example):
@@ -43,6 +44,7 @@ model.train()
 
 for epoch in range(NUM_EPOCHS):
     total_loss = 0
+    optimizer.zero_grad()
     for step, batch in enumerate(train_loader):
         input_ids = batch["input_ids"].to(device)
         attention_mask = batch["attention_mask"].to(device)
@@ -50,16 +52,22 @@ for epoch in range(NUM_EPOCHS):
 
         labels[labels == tokenizer.pad_token_id] = -100
 
-        optimizer.zero_grad()
         outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
-        loss = outputs.loss
+        loss = outputs.loss / ACCUMULATION_STEPS
         loss.backward()
-        optimizer.step()
 
-        total_loss += loss.item()
+        total_loss += loss.item() * ACCUMULATION_STEPS
+
+        if (step + 1) % ACCUMULATION_STEPS == 0:
+            optimizer.step()
+            optimizer.zero_grad()
 
         if step % 100 == 0:
-            log.info(f"Epoch {epoch+1}/{NUM_EPOCHS} | Step {step}/{len(train_loader)} | Loss: {loss.item():.4f}")
+            log.info(f"Epoch {epoch+1}/{NUM_EPOCHS} | Step {step}/{len(train_loader)} | Loss: {loss.item() * ACCUMULATION_STEPS:.4f}")
+
+    if (step + 1) % ACCUMULATION_STEPS != 0:
+        optimizer.step()
+        optimizer.zero_grad()
 
     avg_loss = total_loss / len(train_loader)
     log.info(f"Epoch {epoch+1}/{NUM_EPOCHS} finished | Avg Loss: {avg_loss:.4f}")

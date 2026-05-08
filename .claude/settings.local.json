@@ -1,7 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "Bash(python -m unittest test_predict -v)"
+      "Bash(python -m unittest test_predict -v)",
+      "Bash(pip install *)",
+      "Bash(python *)"
     ]
   }
 }
