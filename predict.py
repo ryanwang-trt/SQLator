@@ -5,6 +5,7 @@ import re
 from datasets import load_dataset
 from transformers import T5Tokenizer, T5ForConditionalGeneration
 from config import MODEL_PATH, MAX_INPUT_LENGTH, MAX_OUTPUT_LENGTH, NUM_BEAMS, PROMPT_TEMPLATE
+import sqlglot
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
@@ -59,9 +60,12 @@ def evaluate():
 def normalize_sql(sql):
     sql = sql.strip().lower()
     sql = sql.replace('"', "'")
-    sql = re.sub(r'\s+', ' ', sql)
-    sql = sql.replace(' ,', ',')
-    sql = sql.replace(', ', ',')
+    try:
+        parsed = sqlglot.parse_one(sql, dialect="sqlite")
+        sql = parsed.sql(dialect="sqlite")
+    except Exception:
+        pass  # fall back to raw string if parsing fails
+    sql = re.sub(r'\s+', ' ', sql).strip()
     return sql
 
 if __name__ == "__main__":
