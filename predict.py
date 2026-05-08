@@ -10,15 +10,23 @@ import sqlglot
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
 
-if not os.path.exists(MODEL_PATH):
-    raise FileNotFoundError(f"Model not found at '{MODEL_PATH}'. Run train.py first.")
+tokenizer = None
+model = None
 
-tokenizer = T5Tokenizer.from_pretrained(MODEL_PATH)
-model = T5ForConditionalGeneration.from_pretrained(MODEL_PATH)
-model.eval()
+def get_model():
+    global tokenizer, model
+    if model is None:
+        if not os.path.exists(MODEL_PATH):
+            raise FileNotFoundError(f"Model not found at '{MODEL_PATH}'. Run train.py first.")
+        tokenizer = T5Tokenizer.from_pretrained(MODEL_PATH)
+        model = T5ForConditionalGeneration.from_pretrained(MODEL_PATH)
+        model.eval()
+        log.info(f"Model loaded from {MODEL_PATH}")
+    return tokenizer, model
 
 def predict(question, db_id="unknown"):
     input_text = PROMPT_TEMPLATE.format(db_id=db_id, question=question)
+    tokenizer, model = get_model()
     tokenized_input = tokenizer(input_text, max_length=MAX_INPUT_LENGTH, return_tensors="pt")
     tokenized_outputs = model.generate(
         input_ids=tokenized_input["input_ids"],
