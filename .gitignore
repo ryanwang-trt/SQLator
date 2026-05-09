@@ -32,3 +32,5 @@ models/
 
 # HuggingFace / dataset cache
 .cache/
+data/
+
