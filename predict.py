@@ -2,9 +2,10 @@ import argparse
 import logging
 import os
 import re
+import sqlite3
 from datasets import load_dataset
 from transformers import T5Tokenizer, T5ForConditionalGeneration
-from config import MODEL_PATH, HF_MODEL_ID, MAX_INPUT_LENGTH, MAX_OUTPUT_LENGTH, NUM_BEAMS, PROMPT_TEMPLATE, MAX_SCHEMA_LENGTH
+from config import MODEL_PATH, HF_MODEL_ID, MAX_INPUT_LENGTH, MAX_OUTPUT_LENGTH, NUM_BEAMS, PROMPT_TEMPLATE, MAX_SCHEMA_LENGTH, SPIDER_DB_DIR
 from schema import load_spider_schemas, truncate_schema
 import sqlglot
 
@@ -41,14 +42,34 @@ def predict(question, db_id="unknown", schema="unknown"):
     )
     return tokenizer.decode(tokenized_outputs[0], skip_special_tokens=True)
 
+def execute_sql(sql, db_path):
+    if not os.path.exists(db_path):
+        return None
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.execute("PRAGMA busy_timeout = 5000")
+        cursor = conn.cursor()
+        cursor.execute(sql)
+        rows = cursor.fetchall()
+        conn.close()
+        return sorted(rows)
+    except Exception:
+        return None
+
+
 def evaluate():
     dataset = load_dataset("spider")
     validation_split = dataset["validation"]
 
     schema_lookup = load_spider_schemas()
 
+    has_dbs = os.path.isdir(SPIDER_DB_DIR)
+    if not has_dbs:
+        log.warning(f"Spider databases not found at '{SPIDER_DB_DIR}'. Execution accuracy will be skipped.")
+
     predictions = []
     samples = []
+    db_ids = []
 
     for i, example in enumerate(validation_split):
         schema = schema_lookup.get(example["db_id"], "unknown")
@@ -56,22 +77,41 @@ def evaluate():
         sample = example["query"]
         predictions.append(normalize_sql(prediction))
         samples.append(normalize_sql(sample))
+        db_ids.append(example["db_id"])
 
         if i % 100 == 0:
             log.info(f"Evaluating: {i}/{len(validation_split)}")
 
-    correct = sum(1 for p, s in zip(predictions, samples) if p == s)
-    accuracy = correct / len(samples) * 100
+    exact_correct = sum(1 for p, s in zip(predictions, samples) if p == s)
+    exact_accuracy = exact_correct / len(samples) * 100
 
-    log.info(f"Exact Match Accuracy: {accuracy:.2f}%")
-    log.info(f"Correct: {correct}/{len(samples)}")
+    log.info(f"Exact Match Accuracy: {exact_accuracy:.2f}%")
+    log.info(f"Exact Match Correct: {exact_correct}/{len(samples)}")
+
+    exec_results = []
+    if has_dbs:
+        for pred, gold, db_id in zip(predictions, samples, db_ids):
+            db_path = os.path.join(SPIDER_DB_DIR, db_id, f"{db_id}.sqlite")
+            pred_result = execute_sql(pred, db_path)
+            gold_result = execute_sql(gold, db_path)
+            match = pred_result is not None and gold_result is not None and pred_result == gold_result
+            exec_results.append(match)
+
+        exec_correct = sum(exec_results)
+        exec_accuracy = exec_correct / len(samples) * 100
+        log.info(f"Execution Accuracy:  {exec_accuracy:.2f}%")
+        log.info(f"Execution Correct:   {exec_correct}/{len(samples)}")
 
     print("\n--- Sample Predictions ---")
     for i in range(5):
         print(f"\nQuestion:  {validation_split[i]['question']}")
         print(f"Predicted: {predictions[i]}")
         print(f"Actual:    {samples[i]}")
-        print(f"Match:     {'✓' if predictions[i] == samples[i] else '✗'}")
+        exact = predictions[i] == samples[i]
+        exec_match = exec_results[i] if exec_results else None
+        exact_mark = "✓" if exact else "✗"
+        exec_mark = "✓" if exec_match else ("✗" if exec_match is not None else "-")
+        print(f"Exact: {exact_mark}  Exec: {exec_mark}")
 
 def normalize_sql(sql):
     sql = sql.strip().lower()

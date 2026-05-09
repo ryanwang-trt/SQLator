@@ -1,9 +1,12 @@
+import os
+import sqlite3
+import tempfile
 import unittest
 from unittest.mock import patch, MagicMock
 
 import torch
 
-from predict import normalize_sql, predict, get_model
+from predict import normalize_sql, predict, get_model, execute_sql
 
 
 class TestNormalizeSql(unittest.TestCase):
@@ -116,6 +119,39 @@ class TestPredict(unittest.TestCase):
         predict("q")
         gen_kwargs = self.mock_model.generate.call_args[1]
         assert gen_kwargs["num_beams"] == 5
+
+
+class TestExecuteSql(unittest.TestCase):
+
+    def setUp(self):
+        self.tmp = tempfile.NamedTemporaryFile(suffix=".sqlite", delete=False)
+        self.db_path = self.tmp.name
+        self.tmp.close()
+        conn = sqlite3.connect(self.db_path)
+        conn.execute("CREATE TABLE t (id INTEGER, name TEXT)")
+        conn.execute("INSERT INTO t VALUES (1, 'a')")
+        conn.execute("INSERT INTO t VALUES (2, 'b')")
+        conn.commit()
+        conn.close()
+
+    def tearDown(self):
+        os.unlink(self.db_path)
+
+    def test_valid_query_returns_sorted_rows(self):
+        result = execute_sql("SELECT * FROM t ORDER BY id DESC", self.db_path)
+        assert result == [(1, "a"), (2, "b")]
+
+    def test_invalid_query_returns_none(self):
+        result = execute_sql("SELECT * FROM nonexistent", self.db_path)
+        assert result is None
+
+    def test_missing_db_returns_none(self):
+        result = execute_sql("SELECT 1", "/nonexistent/path.sqlite")
+        assert result is None
+
+    def test_syntax_error_returns_none(self):
+        result = execute_sql("NOT VALID SQL", self.db_path)
+        assert result is None
 
 
 if __name__ == "__main__":

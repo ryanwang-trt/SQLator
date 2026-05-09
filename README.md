@@ -63,6 +63,21 @@ cd text-to-sql
 pip install -r requirements.txt
 ```
 
+### Download Spider databases (optional, for schema-aware prompting)
+
+The Spider SQLite databases are not included in the HuggingFace dataset and must be downloaded manually:
+
+1. Go to [https://yale-lily.github.io/spider](https://yale-lily.github.io/spider)
+2. Download the dataset zip file
+3. Extract the `database/` folder into this project:
+```bash
+mkdir -p data/spider_databases
+# After extracting the zip, copy the database folder:
+cp -r spider/database/* data/spider_databases/
+```
+
+The result should look like `data/spider_databases/concert_singer/concert_singer.sqlite`, etc.
+
 ### Train the model
 ```bash
 python train.py
@@ -94,7 +109,11 @@ text-to-sql/
 ├── train.py          ← training loop + fine-tuning
 ├── predict.py        ← inference + evaluation
 ├── app.py            ← Flask web demo
+├── schema.py         ← schema loading + formatting
+├── config.py         ← hyperparameters + settings
 ├── models/           ← saved model weights
+├── data/
+│   └── spider_databases/  ← SQLite DBs (manually downloaded)
 ├── requirements.txt  ← dependencies
 └── README.md         
 ```

@@ -16,4 +16,6 @@ HF_MODEL_ID = os.getenv("HF_MODEL_ID", "ryanwang-trt/t5-sql")
 
 PROMPT_TEMPLATE = "translate English to SQL [database: {db_id} | tables: {schema}]: {question}"
 
+SPIDER_DB_DIR = os.getenv("SPIDER_DB_DIR", "data/spider_databases")
+
 MAX_QUESTION_LENGTH = 500
