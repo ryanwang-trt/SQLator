@@ -1,12 +1,12 @@
 import logging
 import torch
 from datasets import load_dataset
-from transformers import T5Tokenizer, T5ForConditionalGeneration
+from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, get_linear_schedule_with_warmup
 from torch.utils.data import DataLoader
 from config import (
-    MODEL_PATH, BASE_MODEL, MAX_INPUT_LENGTH, BATCH_SIZE,
+    MODEL_PATH, BASE_MODEL, MAX_INPUT_LENGTH, MAX_OUTPUT_LENGTH, BATCH_SIZE,
     NUM_EPOCHS, LEARNING_RATE, PROMPT_TEMPLATE, ACCUMULATION_STEPS,
-    MAX_SCHEMA_LENGTH,
+    MAX_SCHEMA_LENGTH, WARMUP_RATIO,
 )
 from schema import load_spider_schemas, truncate_schema
 
@@ -17,9 +17,12 @@ dataset = load_dataset("spider")
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-tokenizer = T5Tokenizer.from_pretrained(BASE_MODEL)
-model = T5ForConditionalGeneration.from_pretrained(BASE_MODEL)
+tokenizer = AutoTokenizer.from_pretrained(BASE_MODEL)
+model = AutoModelForSeq2SeqLM.from_pretrained(BASE_MODEL)
 model = model.to(device)
+# use_cache must be off for gradient checkpointing — otherwise checkpointing
+# silently no-ops and the cache eats the memory we were trying to save.
+model.config.use_cache = False
 model.gradient_checkpointing_enable()
 log.info(f"Model loaded on: {device}")
 
@@ -32,7 +35,7 @@ def tokenize(example):
     target_text = example["query"]
 
     model_inputs = tokenizer(input_text, max_length=MAX_INPUT_LENGTH, truncation=True, padding="max_length")
-    labels = tokenizer(target_text, max_length=MAX_INPUT_LENGTH, truncation=True, padding="max_length")
+    labels = tokenizer(target_text, max_length=MAX_OUTPUT_LENGTH, truncation=True, padding="max_length")
 
     model_inputs["labels"] = labels["input_ids"]
     return model_inputs
@@ -46,8 +49,23 @@ log.info("Tokenization done!")
 
 optimizer = torch.optim.AdamW(model.parameters(), lr=LEARNING_RATE)
 
+# Linear warmup + decay across optimizer (not micro-batch) steps
+steps_per_epoch = (len(train_loader) + ACCUMULATION_STEPS - 1) // ACCUMULATION_STEPS
+total_steps = NUM_EPOCHS * steps_per_epoch
+warmup_steps = int(WARMUP_RATIO * total_steps)
+scheduler = get_linear_schedule_with_warmup(
+    optimizer, num_warmup_steps=warmup_steps, num_training_steps=total_steps
+)
+log.info(f"Scheduler: {warmup_steps} warmup / {total_steps} total optimizer steps")
+
 # Switch model to training mode (enables dropout, etc.)
 model.train()
+
+# Size of the final (possibly partial) accumulation window per epoch — used to
+# scale leftover gradients by the true micro-batch count instead of ACCUMULATION_STEPS.
+num_batches = len(train_loader)
+leftover = num_batches % ACCUMULATION_STEPS
+leftover_start = num_batches - leftover if leftover else num_batches
 
 for epoch in range(NUM_EPOCHS):
     total_loss = 0
@@ -65,30 +83,33 @@ for epoch in range(NUM_EPOCHS):
         # Forward pass: model computes cross-entropy loss internally when labels are provided
         outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
 
-        # Divide loss by ACCUMULATION_STEPS so that when gradients are accumulated
-        # over multiple mini-batches, the total is equivalent to one large batch
-        # (effective batch size = BATCH_SIZE * ACCUMULATION_STEPS = 2 * 4 = 8)
-        loss = outputs.loss / ACCUMULATION_STEPS
+        # Divide by the accumulation-window size so the summed gradient equals a single
+        # full-window update. The final partial window is divided by its actual size
+        # (`leftover`) rather than ACCUMULATION_STEPS, otherwise that step underweights.
+        divisor = leftover if step >= leftover_start else ACCUMULATION_STEPS
+        loss = outputs.loss / divisor
         # Backward pass: compute gradients and accumulate them (not zeroed yet)
         loss.backward()
 
         # Track the original (un-scaled) loss for logging
-        total_loss += loss.item() * ACCUMULATION_STEPS
+        total_loss += loss.item() * divisor
 
         # Only update weights every ACCUMULATION_STEPS steps
         if (step + 1) % ACCUMULATION_STEPS == 0:
             optimizer.step()    # Apply accumulated gradients to update weights
+            scheduler.step()
             optimizer.zero_grad()  # Reset gradients for the next accumulation window
 
         if step % 100 == 0:
-            log.info(f"Epoch {epoch+1}/{NUM_EPOCHS} | Step {step}/{len(train_loader)} | Loss: {loss.item() * ACCUMULATION_STEPS:.4f}")
+            log.info(f"Epoch {epoch+1}/{NUM_EPOCHS} | Step {step}/{num_batches} | LR: {scheduler.get_last_lr()[0]:.2e} | Loss: {loss.item() * divisor:.4f}")
 
     # Handle leftover steps if the dataset size isn't evenly divisible by ACCUMULATION_STEPS
-    if (step + 1) % ACCUMULATION_STEPS != 0:
+    if leftover:
         optimizer.step()
+        scheduler.step()
         optimizer.zero_grad()
 
-    avg_loss = total_loss / len(train_loader)
+    avg_loss = total_loss / num_batches
     log.info(f"Epoch {epoch+1}/{NUM_EPOCHS} finished | Avg Loss: {avg_loss:.4f}")
 
 log.info("Training complete!")

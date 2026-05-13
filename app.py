@@ -1,7 +1,8 @@
 import logging
 import os
+import torch
 from flask import Flask, request, render_template_string
-from transformers import T5Tokenizer, T5ForConditionalGeneration
+from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 from config import MODEL_PATH, HF_MODEL_ID, MAX_INPUT_LENGTH, MAX_OUTPUT_LENGTH, NUM_BEAMS, PROMPT_TEMPLATE, MAX_QUESTION_LENGTH, MAX_SCHEMA_LENGTH
 from schema import truncate_schema
 
@@ -9,6 +10,8 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 log = logging.getLogger(__name__)
 
 app = Flask(__name__)
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 tokenizer = None
 model = None
@@ -21,10 +24,11 @@ def get_model():
         else:
             log.info(f"Local model not found at '{MODEL_PATH}', downloading from HuggingFace: {HF_MODEL_ID}")
             source = HF_MODEL_ID
-        tokenizer = T5Tokenizer.from_pretrained(source)
-        model = T5ForConditionalGeneration.from_pretrained(source)
+        tokenizer = AutoTokenizer.from_pretrained(source)
+        model = AutoModelForSeq2SeqLM.from_pretrained(source)
+        model = model.to(device)
         model.eval()
-        log.info(f"Model loaded from {source}")
+        log.info(f"Model loaded from {source} on {device}")
     return tokenizer, model
 
 def predict(question, db_id="unknown", schema="unknown"):
@@ -33,8 +37,8 @@ def predict(question, db_id="unknown", schema="unknown"):
     tokenizer, model = get_model()
     tokenized_input = tokenizer(input_text, max_length=MAX_INPUT_LENGTH, truncation=True, return_tensors="pt")
     tokenized_outputs = model.generate(
-        input_ids=tokenized_input["input_ids"],
-        attention_mask=tokenized_input["attention_mask"],
+        input_ids=tokenized_input["input_ids"].to(device),
+        attention_mask=tokenized_input["attention_mask"].to(device),
         max_length=MAX_OUTPUT_LENGTH,
         num_beams=NUM_BEAMS,
     )
@@ -254,7 +258,7 @@ HTML = """
 </head>
 <body>
     <div class="container">
-        <div class="badge">Fine-tuned T5 Model</div>
+        <div class="badge">Fine-tuned CodeT5+ Model</div>
         <h1>Text → <span>SQL</span></h1>
         <p class="subtitle">Ask a question in plain English. Get a SQL query back.</p>
 
@@ -290,7 +294,7 @@ HTML = """
         </div>
 
         <div class="footer">
-            Built with T5-small + PyTorch — <a href="https://github.com">View on GitHub</a>
+            Built with CodeT5+ 220M + PyTorch — <a href="https://github.com">View on GitHub</a>
         </div>
     </div>
 </body>

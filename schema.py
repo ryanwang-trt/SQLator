@@ -27,12 +27,14 @@ def load_spider_schemas():
         lookup[db["db_id"]] = _format_schema(
             db["table_names_original"],
             db["column_names_original"],
+            db.get("foreign_keys", []),
         )
     log.info(f"Loaded schemas for {len(lookup)} databases")
     return lookup
 
-# convert tables and colums list into concise table_name(col1,col2) format
-def _format_schema(table_names, column_names_original):
+# convert tables, columns, and foreign keys into concise
+# "t1(c1, c2), t2(c3, c4); FK: t1.c2=t2.c3" format
+def _format_schema(table_names, column_names_original, foreign_keys):
     table_columns = defaultdict(list)
     for table_idx, col_name in column_names_original:
         if table_idx < 0:
@@ -43,13 +45,30 @@ def _format_schema(table_names, column_names_original):
     for i, name in enumerate(table_names):
         cols = ", ".join(table_columns.get(i, []))
         parts.append(f"{name}({cols})")
-    return ", ".join(parts)
+    tables_str = ", ".join(parts)
 
-#trims long schemas
+    fk_parts = []
+    for src_idx, dst_idx in foreign_keys:
+        src_table_idx, src_col = column_names_original[src_idx]
+        dst_table_idx, dst_col = column_names_original[dst_idx]
+        if src_table_idx < 0 or dst_table_idx < 0:
+            continue
+        fk_parts.append(f"{table_names[src_table_idx]}.{src_col}={table_names[dst_table_idx]}.{dst_col}")
+    if not fk_parts:
+        return tables_str
+    return f"{tables_str}; FK: {', '.join(fk_parts)}"
+
+#trims long schemas, preferring to cut at a complete FK entry or table boundary
 def truncate_schema(schema_str, max_length):
     if len(schema_str) <= max_length:
         return schema_str
     truncated = schema_str[:max_length]
+    fk_marker_idx = truncated.find("; FK:")
+    if fk_marker_idx > 0:
+        # In the FK section: cut at the last complete FK entry
+        last_comma = truncated.rfind(",")
+        if last_comma > fk_marker_idx:
+            return truncated[:last_comma]
     last_close = truncated.rfind(")")
     if last_close > 0:
         return truncated[:last_close + 1]

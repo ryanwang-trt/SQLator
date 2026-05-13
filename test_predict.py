@@ -44,8 +44,8 @@ class TestNormalizeSql(unittest.TestCase):
 
 class TestGetModel(unittest.TestCase):
 
-    @patch("predict.T5ForConditionalGeneration")
-    @patch("predict.T5Tokenizer")
+    @patch("predict.AutoModelForSeq2SeqLM")
+    @patch("predict.AutoTokenizer")
     @patch("os.path.exists", return_value=True)
     def test_lazy_loads_once(self, mock_exists, mock_tok_cls, mock_model_cls):
         import predict
@@ -61,8 +61,8 @@ class TestGetModel(unittest.TestCase):
         predict.tokenizer = None
         predict.model = None
 
-    @patch("predict.T5ForConditionalGeneration")
-    @patch("predict.T5Tokenizer")
+    @patch("predict.AutoModelForSeq2SeqLM")
+    @patch("predict.AutoTokenizer")
     @patch("os.path.exists", return_value=False)
     def test_falls_back_to_huggingface(self, mock_exists, mock_tok_cls, mock_model_cls):
         import predict

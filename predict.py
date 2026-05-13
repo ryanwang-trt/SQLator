@@ -3,14 +3,17 @@ import logging
 import os
 import re
 import sqlite3
+import torch
 from datasets import load_dataset
-from transformers import T5Tokenizer, T5ForConditionalGeneration
+from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 from config import MODEL_PATH, HF_MODEL_ID, MAX_INPUT_LENGTH, MAX_OUTPUT_LENGTH, NUM_BEAMS, PROMPT_TEMPLATE, MAX_SCHEMA_LENGTH, SPIDER_DB_DIR
 from schema import load_spider_schemas, truncate_schema
 import sqlglot
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 tokenizer = None
 model = None
@@ -23,10 +26,11 @@ def get_model():
         else:
             log.info(f"Local model not found at '{MODEL_PATH}', downloading from HuggingFace: {HF_MODEL_ID}")
             source = HF_MODEL_ID
-        tokenizer = T5Tokenizer.from_pretrained(source)
-        model = T5ForConditionalGeneration.from_pretrained(source)
+        tokenizer = AutoTokenizer.from_pretrained(source)
+        model = AutoModelForSeq2SeqLM.from_pretrained(source)
+        model = model.to(device)
         model.eval()
-        log.info(f"Model loaded from {source}")
+        log.info(f"Model loaded from {source} on {device}")
     return tokenizer, model
 
 def predict(question, db_id="unknown", schema="unknown"):
@@ -35,8 +39,8 @@ def predict(question, db_id="unknown", schema="unknown"):
     tokenizer, model = get_model()
     tokenized_input = tokenizer(input_text, max_length=MAX_INPUT_LENGTH, truncation=True, return_tensors="pt")
     tokenized_outputs = model.generate(
-        input_ids=tokenized_input["input_ids"],
-        attention_mask=tokenized_input["attention_mask"],
+        input_ids=tokenized_input["input_ids"].to(device),
+        attention_mask=tokenized_input["attention_mask"].to(device),
         max_length=MAX_OUTPUT_LENGTH,
         num_beams=NUM_BEAMS,
     )
@@ -45,16 +49,18 @@ def predict(question, db_id="unknown", schema="unknown"):
 def execute_sql(sql, db_path):
     if not os.path.exists(db_path):
         return None
+    conn = None
     try:
         conn = sqlite3.connect(db_path)
         conn.execute("PRAGMA busy_timeout = 5000")
         cursor = conn.cursor()
         cursor.execute(sql)
-        rows = cursor.fetchall()
-        conn.close()
-        return sorted(rows)
+        return sorted(cursor.fetchall())
     except Exception:
         return None
+    finally:
+        if conn is not None:
+            conn.close()
 
 
 def evaluate():
