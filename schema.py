@@ -27,19 +27,24 @@ def load_spider_schemas():
         lookup[db["db_id"]] = _format_schema(
             db["table_names_original"],
             db["column_names_original"],
+            db.get("column_types", []),
             db.get("foreign_keys", []),
         )
     log.info(f"Loaded schemas for {len(lookup)} databases")
     return lookup
 
 # convert tables, columns, and foreign keys into concise
-# "t1(c1, c2), t2(c3, c4); FK: t1.c2=t2.c3" format
-def _format_schema(table_names, column_names_original, foreign_keys):
+# "t1(c1:type, c2:type), t2(c3:type); FK: t1.c2=t2.c3" format
+def _format_schema(table_names, column_names_original, column_types, foreign_keys):
     table_columns = defaultdict(list)
-    for table_idx, col_name in column_names_original:
+    for col_idx, (table_idx, col_name) in enumerate(column_names_original):
         if table_idx < 0:
             continue
-        table_columns[table_idx].append(col_name)
+        col_type = column_types[col_idx] if col_idx < len(column_types) else ""
+        if col_type:
+            table_columns[table_idx].append(f"{col_name}:{col_type}")
+        else:
+            table_columns[table_idx].append(col_name)
 
     parts = []
     for i, name in enumerate(table_names):

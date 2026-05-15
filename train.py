@@ -1,7 +1,7 @@
 import logging
 import torch
 from datasets import load_dataset
-from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, get_linear_schedule_with_warmup
+from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, DataCollatorForSeq2Seq, get_linear_schedule_with_warmup
 from torch.utils.data import DataLoader
 from config import (
     MODEL_PATH, BASE_MODEL, MAX_INPUT_LENGTH, MAX_OUTPUT_LENGTH, BATCH_SIZE,
@@ -34,16 +34,20 @@ def tokenize(example):
     input_text = PROMPT_TEMPLATE.format(db_id=example["db_id"], schema=schema, question=example["question"])
     target_text = example["query"]
 
-    model_inputs = tokenizer(input_text, max_length=MAX_INPUT_LENGTH, truncation=True, padding="max_length")
-    labels = tokenizer(target_text, max_length=MAX_OUTPUT_LENGTH, truncation=True, padding="max_length")
+    # No padding here — DataCollatorForSeq2Seq pads each batch to its own max length.
+    model_inputs = tokenizer(input_text, max_length=MAX_INPUT_LENGTH, truncation=True)
+    labels = tokenizer(target_text, max_length=MAX_OUTPUT_LENGTH, truncation=True)
 
     model_inputs["labels"] = labels["input_ids"]
     return model_inputs
 
-tokenized = dataset.map(tokenize)
-tokenized["train"].set_format(type="torch", columns=["input_ids", "attention_mask", "labels"])
+tokenized = dataset["train"].map(tokenize, remove_columns=dataset["train"].column_names)
 
-train_loader = DataLoader(tokenized["train"], batch_size=BATCH_SIZE, shuffle=True)
+# Pads input_ids/attention_mask with pad_token_id and labels with -100 so loss
+# ignores padding automatically — no manual label masking needed downstream.
+collator = DataCollatorForSeq2Seq(tokenizer, model=model, padding=True)
+
+train_loader = DataLoader(tokenized, batch_size=BATCH_SIZE, shuffle=True, collate_fn=collator)
 log.info(f"Number of batches: {len(train_loader)}")
 log.info("Tokenization done!")
 
@@ -75,10 +79,8 @@ for epoch in range(NUM_EPOCHS):
         # Move batch tensors to GPU/CPU
         input_ids = batch["input_ids"].to(device)
         attention_mask = batch["attention_mask"].to(device)
+        # DataCollatorForSeq2Seq already pads labels with -100, so loss ignores padding.
         labels = batch["labels"].to(device)
-
-        # Replace pad tokens in labels with -100 so the loss function ignores them
-        labels[labels == tokenizer.pad_token_id] = -100
 
         # Forward pass: model computes cross-entropy loss internally when labels are provided
         outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)

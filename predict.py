@@ -73,30 +73,36 @@ def evaluate():
     if not has_dbs:
         log.warning(f"Spider databases not found at '{SPIDER_DB_DIR}'. Execution accuracy will be skipped.")
 
-    predictions = []
-    samples = []
+    raw_predictions = []
+    raw_samples = []
+    norm_predictions = []
+    norm_samples = []
     db_ids = []
 
     for i, example in enumerate(validation_split):
         schema = schema_lookup.get(example["db_id"], "unknown")
         prediction = predict(example["question"], example["db_id"], schema=schema)
         sample = example["query"]
-        predictions.append(normalize_sql(prediction))
-        samples.append(normalize_sql(sample))
+        raw_predictions.append(prediction)
+        raw_samples.append(sample)
+        norm_predictions.append(normalize_sql(prediction))
+        norm_samples.append(normalize_sql(sample))
         db_ids.append(example["db_id"])
 
         if i % 100 == 0:
             log.info(f"Evaluating: {i}/{len(validation_split)}")
 
-    exact_correct = sum(1 for p, s in zip(predictions, samples) if p == s)
-    exact_accuracy = exact_correct / len(samples) * 100
+    exact_correct = sum(1 for p, s in zip(norm_predictions, norm_samples) if p == s)
+    exact_accuracy = exact_correct / len(norm_samples) * 100
 
     log.info(f"Exact Match Accuracy: {exact_accuracy:.2f}%")
-    log.info(f"Exact Match Correct: {exact_correct}/{len(samples)}")
+    log.info(f"Exact Match Correct: {exact_correct}/{len(norm_samples)}")
 
     exec_results = []
     if has_dbs:
-        for pred, gold, db_id in zip(predictions, samples, db_ids):
+        # Run the raw (un-normalized) SQL so string literals like 'USA' aren't
+        # lowercased into 'usa' and silently miss every row.
+        for pred, gold, db_id in zip(raw_predictions, raw_samples, db_ids):
             db_path = os.path.join(SPIDER_DB_DIR, db_id, f"{db_id}.sqlite")
             pred_result = execute_sql(pred, db_path)
             gold_result = execute_sql(gold, db_path)
@@ -104,16 +110,16 @@ def evaluate():
             exec_results.append(match)
 
         exec_correct = sum(exec_results)
-        exec_accuracy = exec_correct / len(samples) * 100
+        exec_accuracy = exec_correct / len(raw_samples) * 100
         log.info(f"Execution Accuracy:  {exec_accuracy:.2f}%")
-        log.info(f"Execution Correct:   {exec_correct}/{len(samples)}")
+        log.info(f"Execution Correct:   {exec_correct}/{len(raw_samples)}")
 
     print("\n--- Sample Predictions ---")
     for i in range(5):
         print(f"\nQuestion:  {validation_split[i]['question']}")
-        print(f"Predicted: {predictions[i]}")
-        print(f"Actual:    {samples[i]}")
-        exact = predictions[i] == samples[i]
+        print(f"Predicted: {norm_predictions[i]}")
+        print(f"Actual:    {norm_samples[i]}")
+        exact = norm_predictions[i] == norm_samples[i]
         exec_match = exec_results[i] if exec_results else None
         exact_mark = "✓" if exact else "✗"
         exec_mark = "✓" if exec_match else ("✗" if exec_match is not None else "-")
