@@ -188,7 +188,9 @@ Full extension docs in [`chrome-extension/README.md`](chrome-extension/README.md
 
 ---
 
-## Run it yourself (locally)
+## Develop locally
+
+The hosted Space is the easiest way to *use* SQLator. This section is for hacking on the model, backend, or extension.
 
 ```bash
 git clone https://github.com/ryanwang-trt/SQLator.git
@@ -196,47 +198,40 @@ cd SQLator
 pip install -r requirements.txt
 ```
 
-### Quick start — no training needed
-
-The app auto-downloads my fine-tuned weights from the Hub on first request:
+### Run the backend
 
 ```bash
 python app.py
 ```
 
-Open `http://127.0.0.1:5000` for the web demo, or load the extension and (temporarily) swap `chrome-extension/config.js` back to `http://localhost:5000`.
+Open `http://127.0.0.1:5000` for the web demo. The Flask app auto-downloads my fine-tuned weights from the Hub on first request, so no training is required.
 
-### Spider databases (for execution-accuracy eval)
+### Reproduce my training
 
-1. Download from [the Spider site](https://yale-lily.github.io/spider).
-2. Extract the `database/` folder into `data/`:
-   ```
-   data/database/concert_singer/concert_singer.sqlite
-   data/database/world_1/world_1.sqlite
-   ...
-   ```
+Spider's SQLite databases are needed for execution-accuracy evaluation but not for training itself. Download the dataset from [the Spider site](https://yale-lily.github.io/spider) and extract `database/` into `data/`:
 
-### Train
+```
+data/database/concert_singer/concert_singer.sqlite
+data/database/world_1/world_1.sqlite
+...
+```
+
+Then:
 
 ```bash
+# Fine-tune CodeT5+ on Spider (~30 min on GPU, ~2 hr on CPU). Saves to models/t5-sql/.
 python train.py
-```
 
-~30 min on GPU, ~2 hours on CPU. Saves to `models/t5-sql/`.
-
-### Predict
-
-```bash
+# Predict on a single question
 python predict.py --question "how many singers do we have" --db concert_singer
-```
 
-### Evaluate
+# Predict with explicit schema for better results
+python predict.py --question "list all employees" --db company \
+                  --schema "employee(id, name, dept_id), department(id, name)"
 
-```bash
+# Evaluate on the validation set (exact match + execution accuracy)
 python predict.py --evaluate
 ```
-
-Reports both exact match and execution accuracy.
 
 ---
 
