@@ -83,6 +83,48 @@
     }
     textarea::placeholder, input::placeholder { color: #4b5563; }
 
+    .disclosure {
+      width: 100%;
+      margin-top: 4px;
+      padding: 8px 10px;
+      background: transparent;
+      color: #9ca3af;
+      font-family: "DM Sans", sans-serif;
+      font-size: 12px;
+      letter-spacing: 0.3px;
+      border: 1px dashed rgba(255, 255, 255, 0.08);
+      border-radius: 8px;
+      cursor: pointer;
+      text-align: left;
+      transition: border-color 0.15s, color 0.15s;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .disclosure:hover { color: #e0e0e0; border-color: rgba(0, 216, 255, 0.3); }
+    .disclosure .chev { display: inline-block; transition: transform 0.18s ease; color: #00d8ff; font-size: 10px; }
+    .disclosure[aria-expanded="true"] .chev { transform: rotate(90deg); }
+
+    .schema-status {
+      margin-left: auto;
+      font-size: 10px;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      color: #00d8ff;
+    }
+
+    .schema-panel { margin-top: 10px; }
+    .schema-panel textarea {
+      min-height: 80px;
+      font-family: "JetBrains Mono", monospace;
+      font-size: 12px;
+    }
+    .schema-hint {
+      margin-top: 4px;
+      font-size: 10px;
+      color: #4b5563;
+    }
+
     button#go {
       width: 100%;
       margin-top: 12px;
@@ -188,6 +230,15 @@
 
     <label for="db_id">Database (optional)</label>
     <input id="db_id" type="text" placeholder="e.g. concert_singer" />
+
+    <button id="schema-toggle" class="disclosure" type="button" aria-expanded="false">
+      <span class="chev">▸</span> Schema (optional)
+      <span id="schema-status" class="schema-status"></span>
+    </button>
+    <div id="schema-panel" class="schema-panel" hidden>
+      <textarea id="schema" placeholder="e.g. singer(singer_id, name, country, age), concert(concert_id, theme)"></textarea>
+      <div class="schema-hint">Saved across sessions and reused by the right-click flow.</div>
+    </div>
 
     <button id="go">Generate SQL →</button>
     <div class="hint">Press <kbd>Ctrl</kbd> + <kbd>Enter</kbd> to submit</div>

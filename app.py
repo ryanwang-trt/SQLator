@@ -313,6 +313,7 @@ def predict_api():
     data = request.get_json(silent=True) or {}
     question = (data.get("question") or "").strip()
     db_id = (data.get("db_id") or "").strip() or "unknown"
+    schema = (data.get("schema") or "").strip() or "unknown"
 
     if not question:
         return jsonify({"error": "Please enter a question."}), 400
@@ -320,8 +321,8 @@ def predict_api():
         return jsonify({"error": f"Question is too long (max {MAX_QUESTION_LENGTH} characters)."}), 400
 
     try:
-        log.info(f"API predict: question='{question}' db_id='{db_id}'")
-        sql = predict(question, db_id, schema="unknown")
+        log.info(f"API predict: question='{question}' db_id='{db_id}' schema_chars={len(schema)}")
+        sql = predict(question, db_id, schema=schema)
         return jsonify({"sql": sql})
     except Exception as e:
         log.exception("Prediction failed")

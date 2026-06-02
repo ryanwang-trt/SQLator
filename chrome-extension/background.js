@@ -26,11 +26,15 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     return;
   }
 
+  const { lastDb, lastSchema } = await chrome.storage.local.get(["lastDb", "lastSchema"]);
+  const db_id = (lastDb || "").trim() || "unknown";
+  const schema = (lastSchema || "").trim();
+
   try {
     const res = await fetch(`${API_BASE}/predict`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ question, db_id: "unknown" }),
+      body: JSON.stringify({ question, db_id, schema }),
     });
     const data = await res.json().catch(() => ({}));
 

@@ -2,6 +2,10 @@ const $ = (id) => document.getElementById(id);
 
 const questionEl = $("question");
 const dbEl = $("db_id");
+const schemaEl = $("schema");
+const schemaToggle = $("schema-toggle");
+const schemaPanel = $("schema-panel");
+const schemaStatus = $("schema-status");
 const goBtn = $("go");
 const outputEl = $("output");
 const sqlEl = $("sql");
@@ -34,10 +38,29 @@ async function pingHealth() {
   }
 }
 
+function setSchemaPanelOpen(open) {
+  schemaToggle.setAttribute("aria-expanded", open ? "true" : "false");
+  schemaPanel.hidden = !open;
+}
+
+function updateSchemaStatus() {
+  const hasSchema = schemaEl.value.trim().length > 0;
+  schemaStatus.textContent = hasSchema ? "● set" : "";
+}
+
 async function restoreState() {
-  const { lastQuestion, lastDb } = await chrome.storage.local.get(["lastQuestion", "lastDb"]);
+  const { lastQuestion, lastDb, lastSchema } = await chrome.storage.local.get([
+    "lastQuestion",
+    "lastDb",
+    "lastSchema",
+  ]);
   if (lastQuestion) questionEl.value = lastQuestion;
   if (lastDb) dbEl.value = lastDb;
+  if (lastSchema) {
+    schemaEl.value = lastSchema;
+    setSchemaPanelOpen(true);
+  }
+  updateSchemaStatus();
 }
 
 function showResult(sql) {
@@ -59,13 +82,18 @@ function showError(msg) {
 async function submit() {
   const question = questionEl.value.trim();
   const db_id = dbEl.value.trim();
+  const schema = schemaEl.value.trim();
 
   if (!question) {
     showError("Please enter a question.");
     return;
   }
 
-  await chrome.storage.local.set({ lastQuestion: question, lastDb: db_id });
+  await chrome.storage.local.set({
+    lastQuestion: question,
+    lastDb: db_id,
+    lastSchema: schema,
+  });
 
   goBtn.disabled = true;
   const originalLabel = goBtn.textContent;
@@ -75,7 +103,7 @@ async function submit() {
     const res = await fetch(`${API_BASE}/predict`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ question, db_id }),
+      body: JSON.stringify({ question, db_id, schema }),
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok || data.error) {
@@ -93,6 +121,13 @@ async function submit() {
     goBtn.textContent = originalLabel;
   }
 }
+
+schemaToggle.addEventListener("click", () => {
+  const open = schemaToggle.getAttribute("aria-expanded") === "true";
+  setSchemaPanelOpen(!open);
+});
+
+schemaEl.addEventListener("input", updateSchemaStatus);
 
 goBtn.addEventListener("click", submit);
 
