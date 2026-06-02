@@ -7,7 +7,7 @@ Inspired by [Chat2DB](https://github.com/codePhiliaX/Chat2DB).
 ![Demo](demo.gif)
 
 **Try it without installing anything locally:**
-- Backend is live at <https://ryanwang-trt-sqlator.hf.space> — `curl https://ryanwang-trt-sqlator.hf.space/health` returns `{"status":"ok"}`.
+- Backend lives on [Hugging Face Spaces](https://huggingface.co/spaces/ryanwang-trt/SQLator), API at <https://ryanwang-trt-sqlator.hf.space> (`curl …/health` returns `{"status":"ok"}`).
 - The Chrome extension in [`chrome-extension/`](chrome-extension/) already points at it. Load unpacked at `chrome://extensions`, click the icon, ask a question.
 
 ---
@@ -143,14 +143,14 @@ git clone https://huggingface.co/spaces/<you>/sqlator sqlator-space
 cd sqlator-space
 
 # 3. Copy the backend in (skip chrome-extension/, data/, models/)
-cp ../Text-to-Sql/app.py ../Text-to-Sql/config.py ../Text-to-Sql/schema.py \
-   ../Text-to-Sql/requirements.txt ../Text-to-Sql/Dockerfile ../Text-to-Sql/.dockerignore .
+cp ../SQLator/app.py ../SQLator/config.py ../SQLator/schema.py \
+   ../SQLator/requirements.txt ../SQLator/Dockerfile ../SQLator/.dockerignore .
 
 # 4. Push — auth with an HF access token (write scope)
 git add . && git commit -m "Deploy backend" && git push
 ```
 
-Watch the build at `https://huggingface.co/spaces/<you>/sqlator` → *Logs*. First build ~5 min. When you see `Listening at: http://0.0.0.0:7860`, hit `/health` to verify, then point the extension at the new URL (see below).
+Watch the build on your Space page → *Logs* tab. First build ~5 min. When you see `Listening at: http://0.0.0.0:7860`, hit `/health` to verify, then point the extension at the new URL (see below). My own deployment is at [huggingface.co/spaces/ryanwang-trt/SQLator](https://huggingface.co/spaces/ryanwang-trt/SQLator) for reference.
 
 Same `Dockerfile` works on Render, Railway, Fly.io, or any Docker host — it listens on port 7860 by default.
 
