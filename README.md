@@ -266,8 +266,6 @@ SQLator/
 - **Schema context** is the single highest-impact improvement for text-to-SQL — the model can't guess column names it's never seen. Building the same field into the Chrome extension's popup (and reusing it for context-menu queries) closes the same gap at the UX layer.
 - **Exact match is harsh** — execution accuracy is more meaningful because semantically correct SQL with different formatting still fails exact match.
 - **Low training loss ≠ better generalization** — CodeT5+ reached 0.02 loss but matched T5-small's exact match, classic overfitting to seen schemas.
-- **Lazy loading + Hub fallback** turned the local Flask app into something HF Spaces could just run with no special prep. The weights aren't in the Docker image; they download from the Hub on the first request and cache on disk.
-- **Shipping the last mile matters.** A notebook-quality model nobody uses is less interesting than a worse one anyone can hit from a browser tab.
 
 ---
 
