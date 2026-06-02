@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>SQLator</title>
+  <style>
+    @import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=DM+Sans:wght@400;500;700&display=swap");
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html, body {
+      width: 360px;
+      background: #0a0c10;
+      color: #e0e0e0;
+      font-family: "DM Sans", sans-serif;
+    }
+
+    .wrap { padding: 16px 16px 14px; }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 14px;
+    }
+
+    .title {
+      font-family: "JetBrains Mono", monospace;
+      font-weight: 700;
+      font-size: 16px;
+      color: #ffffff;
+    }
+    .title span { color: #00d8ff; }
+
+    .status {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      color: #6b7280;
+      padding: 4px 8px;
+      border-radius: 100px;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      background: rgba(255, 255, 255, 0.02);
+    }
+    .status .dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #6b7280;
+    }
+    .status.online .dot { background: #34d399; box-shadow: 0 0 6px #34d399; }
+    .status.online { color: #34d399; }
+    .status.offline .dot { background: #f87171; }
+    .status.offline { color: #f87171; }
+
+    label {
+      display: block;
+      font-size: 11px;
+      color: #9ca3af;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      margin: 10px 0 6px;
+    }
+
+    textarea, input[type="text"] {
+      width: 100%;
+      background: rgba(0, 0, 0, 0.4);
+      color: #f0f0f0;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-family: "DM Sans", sans-serif;
+      font-size: 13px;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    textarea { resize: vertical; min-height: 70px; }
+    textarea:focus, input[type="text"]:focus {
+      border-color: rgba(0, 216, 255, 0.5);
+    }
+    textarea::placeholder, input::placeholder { color: #4b5563; }
+
+    button#go {
+      width: 100%;
+      margin-top: 12px;
+      padding: 11px;
+      background: linear-gradient(135deg, #00d8ff, #5b8def);
+      color: #0a0c10;
+      font-family: "DM Sans", sans-serif;
+      font-weight: 700;
+      font-size: 13px;
+      letter-spacing: 0.4px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: opacity 0.15s, transform 0.08s;
+    }
+    button#go:hover { opacity: 0.9; }
+    button#go:active { transform: scale(0.99); }
+    button#go:disabled { opacity: 0.5; cursor: progress; }
+
+    .hint {
+      margin-top: 8px;
+      font-size: 11px;
+      color: #4b5563;
+      text-align: center;
+    }
+    .hint kbd {
+      font-family: "JetBrains Mono", monospace;
+      font-size: 10px;
+      padding: 1px 5px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 4px;
+      background: rgba(255, 255, 255, 0.03);
+      color: #9ca3af;
+    }
+
+    .output {
+      margin-top: 14px;
+      padding-top: 14px;
+      border-top: 1px solid rgba(255, 255, 255, 0.06);
+      display: none;
+    }
+    .output.show { display: block; }
+
+    .out-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 6px;
+    }
+    .out-label {
+      font-size: 10px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: #6b7280;
+    }
+    .copy-btn {
+      background: transparent;
+      color: #00d8ff;
+      border: 1px solid rgba(0, 216, 255, 0.3);
+      border-radius: 6px;
+      padding: 3px 8px;
+      font-family: "DM Sans", sans-serif;
+      font-size: 11px;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .copy-btn:hover { background: rgba(0, 216, 255, 0.1); }
+    .copy-btn.copied { color: #34d399; border-color: rgba(52, 211, 153, 0.4); }
+
+    pre.sql {
+      background: rgba(0, 0, 0, 0.5);
+      border: 1px solid rgba(0, 216, 255, 0.15);
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-family: "JetBrains Mono", monospace;
+      font-size: 12px;
+      color: #00d8ff;
+      line-height: 1.5;
+      overflow-x: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .err {
+      color: #f87171;
+      font-size: 12px;
+      padding: 8px 10px;
+      background: rgba(248, 113, 113, 0.08);
+      border: 1px solid rgba(248, 113, 113, 0.2);
+      border-radius: 8px;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="title">SQL<span>ator</span></div>
+      <div id="status" class="status"><span class="dot"></span><span id="status-text">Checking…</span></div>
+    </header>
+
+    <label for="question">Question</label>
+    <textarea id="question" placeholder="Ask a question…" autofocus></textarea>
+
+    <label for="db_id">Database (optional)</label>
+    <input id="db_id" type="text" placeholder="e.g. concert_singer" />
+
+    <button id="go">Generate SQL →</button>
+    <div class="hint">Press <kbd>Ctrl</kbd> + <kbd>Enter</kbd> to submit</div>
+
+    <div id="output" class="output">
+      <div class="out-head">
+        <div class="out-label">Generated SQL</div>
+        <button id="copy" class="copy-btn">Copy</button>
+      </div>
+      <pre id="sql" class="sql"></pre>
+      <div id="error" class="err" style="display:none;"></div>
+    </div>
+  </div>
+
+  <script src="config.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

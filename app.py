@@ -1,7 +1,8 @@
 import logging
 import os
 import torch
-from flask import Flask, request, render_template_string
+from flask import Flask, request, render_template_string, jsonify
+from flask_cors import CORS
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 from config import MODEL_PATH, HF_MODEL_ID, MAX_INPUT_LENGTH, MAX_OUTPUT_LENGTH, NUM_BEAMS, PROMPT_TEMPLATE, MAX_QUESTION_LENGTH, MAX_SCHEMA_LENGTH
 from schema import truncate_schema
@@ -10,6 +11,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 log = logging.getLogger(__name__)
 
 app = Flask(__name__)
+CORS(app)
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -48,7 +50,7 @@ HTML = """
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Text2SQL — Natural Language to SQL</title>
+    <title>SQLator — Natural Language to SQL</title>
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -259,7 +261,7 @@ HTML = """
 <body>
     <div class="container">
         <div class="badge">Fine-tuned CodeT5+ Model</div>
-        <h1>Text → <span>SQL</span></h1>
+        <h1>SQL<span>ator</span></h1>
         <p class="subtitle">Ask a question in plain English. Get a SQL query back.</p>
 
         <div class="card">
@@ -300,6 +302,31 @@ HTML = """
 </body>
 </html>
 """
+
+@app.route("/health", methods=["GET"])
+def health():
+    return jsonify({"status": "ok"})
+
+
+@app.route("/predict", methods=["POST"])
+def predict_api():
+    data = request.get_json(silent=True) or {}
+    question = (data.get("question") or "").strip()
+    db_id = (data.get("db_id") or "").strip() or "unknown"
+
+    if not question:
+        return jsonify({"error": "Please enter a question."}), 400
+    if len(question) > MAX_QUESTION_LENGTH:
+        return jsonify({"error": f"Question is too long (max {MAX_QUESTION_LENGTH} characters)."}), 400
+
+    try:
+        log.info(f"API predict: question='{question}' db_id='{db_id}'")
+        sql = predict(question, db_id, schema="unknown")
+        return jsonify({"sql": sql})
+    except Exception as e:
+        log.exception("Prediction failed")
+        return jsonify({"error": f"Inference failed: {e}"}), 500
+
 
 @app.route("/", methods=["GET", "POST"])
 def home():

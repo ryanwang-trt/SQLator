@@ -4,5 +4,6 @@ datasets
 scikit-learn
 accelerate
 flask
+flask-cors
 huggingface_hub
 python-dotenv

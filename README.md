@@ -1,4 +1,4 @@
-# Text → SQL 
+# SQLator
 
 I fine-tuned a transformer model on the Spider dataset to turn plain English questions into SQL queries. Built the whole thing from scratch — PyTorch training loop, evaluation pipeline, and a Flask web demo.
 
@@ -96,8 +96,8 @@ BERT is encoder-only — great for classification tasks like sentiment analysis.
 ## Run It Yourself
 
 ```bash
-git clone https://github.com/ryanwang-trt/text-to-sql.git
-cd text-to-sql
+git clone https://github.com/ryanwang-trt/sqlator.git
+cd sqlator
 pip install -r requirements.txt
 ```
 
@@ -148,7 +148,7 @@ python app.py
 ## Project Structure
 
 ```
-text-to-sql/
+sqlator/
 ├── train.py          ← training loop + fine-tuning
 ├── predict.py        ← inference + evaluation (exact match + execution accuracy)
 ├── app.py            ← Flask web demo (lazy model loading)

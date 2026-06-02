@@ -1,0 +1,33 @@
+{
+  "manifest_version": 3,
+  "name": "SQLator",
+  "version": "1.0.0",
+  "description": "Generate SQL from natural language. Use the popup or right-click any selected text.",
+  "permissions": ["contextMenus", "storage", "scripting", "activeTab"],
+  "host_permissions": ["http://localhost:5000/*"],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "SQLator",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "css": ["content.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}
