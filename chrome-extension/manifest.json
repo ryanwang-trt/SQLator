@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "description": "Generate SQL from natural language. Use the popup or right-click any selected text.",
   "permissions": ["contextMenus", "storage", "scripting", "activeTab"],
-  "host_permissions": ["http://localhost:5000/*"],
+  "host_permissions": ["https://ryanwang-trt-sqlator.hf.space/*"],
   "action": {
     "default_popup": "popup.html",
     "default_title": "SQLator",
